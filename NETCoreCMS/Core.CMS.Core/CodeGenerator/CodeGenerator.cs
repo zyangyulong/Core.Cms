@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using Core.CMS.Core.DbHelper;
 using Core.CMS.Core.Extensions;
 using Core.CMS.Core.Models;
 using Core.CMS.Core.Options;
@@ -36,12 +37,13 @@ namespace Core.CMS.Core.CodeGenerator
                 throw new ArgumentNullException("不指定数据库连接串就生成代码，你想上天吗？");
             if (_options.DbType.IsNullOrWhiteSpace())
                 throw new ArgumentNullException("不指定数据库类型就生成代码，你想逆天吗？");
-            if (_options.DbType != DatabaseType.SqlServer.ToString())
-                throw new ArgumentNullException("这是我的错，目前只支持MSSQL数据库的代码生成！后续更新MySQL");
-
-            var path = AppDomain.CurrentDomain.BaseDirectory;
+            var path = AppDomain.CurrentDomain.BaseDirectory;//没有时默认的路径
             if (_options.OutputPath.IsNullOrWhiteSpace())
+            {
                 _options.OutputPath = path;
+                _options.IRepositoryOutputPath = path;
+                _options.RepositoryNamespace = path;
+            }
             var flag = path.IndexOf("/bin");
             if (flag > 0)
                 Delimiter = "/";//如果可以取到值，修改分割符
@@ -54,83 +56,40 @@ namespace Core.CMS.Core.CodeGenerator
         public void GenerateModelCodesFromDatabase(bool isCoveredExsited = true)
         {
             //TODO 从数据库获取表列表以及生成实体对象
-            if (_options.DbType != DatabaseType.SqlServer.ToString())
-                throw new ArgumentNullException("这是我的错，目前只支持MSSQL数据库的代码生成！后续更新MySQL");
-            DatabaseType dbType = DatabaseType.SqlServer;
-            string strGetAllTables = @"SELECT DISTINCT d.name as TableName, f.value as TableComment
-FROM      sys.syscolumns AS a LEFT OUTER JOIN
-                sys.systypes AS b ON a.xusertype = b.xusertype INNER JOIN
-                sys.sysobjects AS d ON a.id = d.id AND d.xtype = 'U' AND d.name <> 'dtproperties' LEFT OUTER JOIN
-                sys.syscomments AS e ON a.cdefault = e.id LEFT OUTER JOIN
-                sys.extended_properties AS g ON a.id = g.major_id AND a.colid = g.minor_id LEFT OUTER JOIN
-                sys.extended_properties AS f ON d.id = f.major_id AND f.minor_id = 0";
-            List<DbTable> tables = null;
-            using (var conn = new SqlConnection(_options.ConnectionString))
+
+            DatabaseType dbType = ConnectionFactory.GetDataBaseType(_options.DbType);//使用数据库连接工厂
+            List<DbTable> tables = new List<DbTable>();
+            using (var dbConnection = ConnectionFactory.CreateConnection(dbType, _options.ConnectionString))
             {
-                tables = conn.Query<DbTable>(strGetAllTables).ToList();
-                tables.ForEach(item =>
-                {
-                    string strGetTableColumns = @"SELECT   a.name AS ColName, CONVERT(bit, (CASE WHEN COLUMNPROPERTY(a.id, a.name, 'IsIdentity') 
-                = 1 THEN 1 ELSE 0 END)) AS IsIdentity, CONVERT(bit, (CASE WHEN
-                    (SELECT   COUNT(*)
-                     FROM      sysobjects
-                     WHERE   (name IN
-                                         (SELECT   name
-                                          FROM      sysindexes
-                                          WHERE   (id = a.id) AND (indid IN
-                                                              (SELECT   indid
-                                                               FROM      sysindexkeys
-                                                               WHERE   (id = a.id) AND (colid IN
-                                                                                   (SELECT   colid
-                                                                                    FROM      syscolumns
-                                                                                    WHERE   (id = a.id) AND (name = a.name))))))) AND (xtype = 'PK')) 
-                > 0 THEN 1 ELSE 0 END)) AS IsPrimaryKey, b.name AS ColumnType, COLUMNPROPERTY(a.id, a.name, 'PRECISION') 
-                AS ColumnLength, CONVERT(bit, (CASE WHEN a.isnullable = 1 THEN 1 ELSE 0 END)) AS IsNullable, ISNULL(e.text, '') 
-                AS DefaultValue, ISNULL(g.value, ' ') AS Comment
-FROM      sys.syscolumns AS a LEFT OUTER JOIN
-                sys.systypes AS b ON a.xtype = b.xusertype INNER JOIN
-                sys.sysobjects AS d ON a.id = d.id AND d.xtype = 'U' AND d.name <> 'dtproperties' LEFT OUTER JOIN
-                sys.syscomments AS e ON a.cdefault = e.id LEFT OUTER JOIN
-                sys.extended_properties AS g ON a.id = g.major_id AND a.colid = g.minor_id LEFT OUTER JOIN
-                sys.extended_properties AS f ON d.id = f.class AND f.minor_id = 0
-WHERE   (b.name IS NOT NULL) AND (d.name = @TableName)
-ORDER BY a.id, a.colorder";
-                    item.Columns = conn.Query<DbTableColumn>(strGetTableColumns, new
-                    {
-                        TableName = item.TableName
-                    }).ToList();
-
-                    item.Columns.ForEach(x =>
-                    {
-                        var csharpType = DbColumnTypeCollection.DbColumnDataTypes.FirstOrDefault(t =>
-                            t.DatabaseType == dbType && t.ColumnTypes.Split(',').Any(p =>
-                                p.Trim().Equals(x.ColumnType, StringComparison.OrdinalIgnoreCase)))?.CSharpType;
-                        if (string.IsNullOrEmpty(csharpType))
-                        {
-                            throw new SqlTypeException($"未从字典中找到\"{x.ColumnType}\"对应的C#数据类型，请更新DbColumnTypeCollection类型映射字典。");
-                        }
-
-                        x.CSharpType = csharpType;
-                    });
-                });
+                //获取完整数据库信息包含表和列的信息
+                tables = dbConnection.GetCurrentDatabaseTableList(dbType);
             }
-
             if (tables != null && tables.Any())
             {
                 foreach (var table in tables)
-                {
+                {  
+                    GenerateEntity(table, isCoveredExsited);//生成实体
                     if (table.Columns.Any(c => c.IsPrimaryKey))
                     {
-                        GenerateEntity(table, isCoveredExsited);
+                        var pkTypeName = table.Columns.First(m => m.IsPrimaryKey).CSharpType;
+                        GenerateIRepository(table, pkTypeName, isCoveredExsited);//生成仓储接口
+                        GenerateRepository(table, pkTypeName, isCoveredExsited);//生成仓储
                     }
                 }
             }
+
+           
         }
 
-
+        #region 生成数据库实体类型
+        /// <summary>
+        /// 生成数据库实体类型
+        /// </summary>
+        /// <param name="table"></param>
+        /// <param name="isCoveredExsited"></param>
         private void GenerateEntity(DbTable table, bool isCoveredExsited = true)
         {
-            var modelPath = _options.OutputPath;
+            var modelPath = _options.OutputPath+"Entitys";
             if (!Directory.Exists(modelPath))
             {
                 Directory.CreateDirectory(modelPath);
@@ -156,9 +115,65 @@ ORDER BY a.id, a.colorder";
                 .Replace("{ModelProperties}", sb.ToString());
             WriteAndSave(fullPath, content);
         }
+        #endregion
 
+
+        #region  生成IRepository层代码文件
+
+        private void GenerateIRepository(DbTable table, string keyTypeName, bool ifExsitedCovered = true)
+        {
+            var iRepositoryPath = _options.IRepositoryOutputPath +"IRep"+Delimiter;
+            if (!Directory.Exists(iRepositoryPath))
+            {
+                Directory.CreateDirectory(iRepositoryPath);
+            }
+            var fullPath = iRepositoryPath  + "I" + table.TableName + "Repository.cs";
+            if (File.Exists(fullPath) && !ifExsitedCovered)
+                return;
+            var content = ReadTemplate("IRepositoryTemplate.txt");//IRepository的模板
+            content = content.Replace("{Comment}", table.TableComment)
+                .Replace("{Author}", _options.Author)
+                .Replace("{GeneratorTime}", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"))
+                .Replace("{IRepositoryNamespace}", _options.IRepositoryNamespace)//仓储接口命名空间
+                .Replace("{ModelName}", table.TableName)
+                .Replace("{KeyTypeName}", keyTypeName);
+            WriteAndSave(fullPath, content);//生成
+        }
+        #endregion
+
+        #region 生成Repository层代码文件
         /// <summary>
-        /// 生成属性
+        /// 生成Repository层代码文件
+        /// </summary>
+        /// <param name="modelTypeName"></param>
+        /// <param name="keyTypeName"></param>
+        /// <param name="ifExsitedCovered"></param>
+        private void GenerateRepository(DbTable table, string keyTypeName, bool ifExsitedCovered = true)
+        {
+            var repositoryPath = _options.RepositoryOutputPath+"Rep"+Delimiter;
+            if (!Directory.Exists(repositoryPath))
+            {
+                Directory.CreateDirectory(repositoryPath);
+            }
+            var fullPath = repositoryPath  + table.TableName + "Repository.cs";
+            if (File.Exists(fullPath) && !ifExsitedCovered)
+                return;
+            var content = ReadTemplate("RepositoryTemplate.txt");
+            content = content.Replace("{Comment}", table.TableComment)
+                .Replace("{Author}", _options.Author)
+                .Replace("{GeneratorTime}", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"))
+                .Replace("{RepositoryNamespace}", _options.RepositoryNamespace)//Repository命名空间
+                .Replace("{ModelName}", table.TableName)
+                .Replace("{KeyTypeName}", keyTypeName);
+            WriteAndSave(fullPath, content);
+        }
+        #endregion
+
+
+
+        #region 生成实体属性
+        /// <summary>
+        /// 生成实体属性
         /// </summary>
         /// <param name="tableName">表名</param>
         /// <param name="column">列</param>
@@ -166,22 +181,39 @@ ORDER BY a.id, a.colorder";
         private static string GenerateEntityProperty(DbTableColumn column)
         {
             var sb = new StringBuilder();
-            if (!column.Comment.IsNullOrWhiteSpace())
+            if (!string.IsNullOrEmpty(column.Comment))
             {
                 sb.AppendLine("\t\t/// <summary>");
                 sb.AppendLine("\t\t/// " + column.Comment);
                 sb.AppendLine("\t\t/// </summary>");
             }
-            var colType = column.CSharpType;
-            if (colType.ToLower() != "string" && colType.ToLower() != "byte[]" && colType.ToLower() != "object" &&
-                column.IsNullable)
+            if (column.IsPrimaryKey)
             {
-                colType = colType + "?";
+                sb.AppendLine("\t\t[Key]");
+                sb.AppendLine($"\t\tpublic {column.CSharpType} Id " + "{get;set;}");
             }
-            sb.AppendLine($"\t\tpublic {colType} {column.ColName} " + "{get;set;}");
+            else
+            {
+                if (!column.IsNullable)
+                {
+                    sb.AppendLine("\t\t[Required]");
+                }
+                var colType = column.CSharpType;
+                if (colType.ToLower() != "string" && colType.ToLower() != "byte[]" && colType.ToLower() != "object" &&
+                    column.IsNullable)
+                {
+                    colType = colType + "?";
+                }
+
+                sb.AppendLine($"\t\tpublic {colType} {column.ColName} " + "{get;set;}");
+            }
+
             return sb.ToString();
         }
+        #endregion
 
+        
+        #region 读模板和写文件
         /// <summary>
         /// 从代码模板中读取内容
         /// </summary>
@@ -227,6 +259,8 @@ ORDER BY a.id, a.colorder";
                 }
             }
         }
+        #endregion
+       
 
     }
 }

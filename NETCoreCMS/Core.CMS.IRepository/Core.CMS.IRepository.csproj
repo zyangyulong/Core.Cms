@@ -4,4 +4,9 @@
     <TargetFramework>netcoreapp2.2</TargetFramework>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Core.CMS.Core\Core.CMS.Core.csproj" />
+    <ProjectReference Include="..\Core.CMS.Models\Core.CMS.Models.csproj" />
+  </ItemGroup>
+
 </Project>

@@ -1,34 +1,51 @@
-// 本代码由代码生成器生成请勿随意改动
-// 生成时间  2018-12-13 23:34:04
+/**
+*┌──────────────────────────────────────────────────────────────┐
+*│　描    述：后台管理员                                                    
+*│　作    者：张玉龙                                              
+*│　版    本：1.0   模板代码自动生成                                              
+*│　创建时间：2018-12-23 17:47:18                            
+*└──────────────────────────────────────────────────────────────┘
+*┌──────────────────────────────────────────────────────────────┐
+*│　命名空间: Core.CMS.Models                                  
+*│　类    名：Manager                                     
+*└──────────────────────────────────────────────────────────────┘
+*/
 using System;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Core.CMS.Models
 {
 	/// <summary>
 	/// 张玉龙
-	/// 2018-12-13 23:34:04
+	/// 2018-12-23 17:47:18
 	/// 后台管理员
 	/// </summary>
+	[Table("Manager")]
 	public class Manager
 	{
-				/// <summary>
+		/// <summary>
 		/// 主键
 		/// </summary>
+		[Key]
 		public Int32 Id {get;set;}
 
 		/// <summary>
 		/// 角色ID
 		/// </summary>
+		[Required]
 		public Int32 RoleId {get;set;}
 
 		/// <summary>
 		/// 用户名
 		/// </summary>
+		[Required]
 		public String UserName {get;set;}
 
 		/// <summary>
 		/// 密码
 		/// </summary>
+		[Required]
 		public String Password {get;set;}
 
 		/// <summary>
@@ -69,11 +86,13 @@ namespace Core.CMS.Models
 		/// <summary>
 		/// 添加人
 		/// </summary>
+		[Required]
 		public Int32 AddManagerId {get;set;}
 
 		/// <summary>
 		/// 添加时间
 		/// </summary>
+		[Required]
 		public DateTime AddTime {get;set;}
 
 		/// <summary>
@@ -89,11 +108,13 @@ namespace Core.CMS.Models
 		/// <summary>
 		/// 是否锁定
 		/// </summary>
+		[Required]
 		public Boolean IsLock {get;set;}
 
 		/// <summary>
 		/// 是否删除
 		/// </summary>
+		[Required]
 		public Boolean IsDelete {get;set;}
 
 		/// <summary>

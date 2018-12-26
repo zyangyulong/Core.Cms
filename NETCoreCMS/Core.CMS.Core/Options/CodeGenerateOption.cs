@@ -5,16 +5,8 @@ namespace Core.CMS.Core.Options
     /// <summary>
     /// 代码生成器配置选项
     /// </summary>
-    public class CodeGenerateOption
+    public class CodeGenerateOption:DbOpion
     {
-        /// <summary>
-        /// 数据库连接字符串
-        /// </summary>
-        public string ConnectionString { get; set; }
-        /// <summary>
-        /// 数据库类型
-        /// </summary>
-        public string DbType { get; set; }
         /// <summary>
         /// 作者
         /// </summary>
@@ -26,13 +18,31 @@ namespace Core.CMS.Core.Options
         public string GeneratorTime { get; set; } = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
 
         /// <summary>
-        /// 输出路径
+        /// 实体输出路径
         /// </summary>
         public string OutputPath { get; set; }
+
+        /// <summary>
+        /// 仓储接口输出路径
+        /// </summary>
+        public string IRepositoryOutputPath { get; set; }
+
+        /// <summary>
+        /// 仓储实现输出路径
+        /// </summary>
+        public string RepositoryOutputPath { get; set; }
 
         /// <summary>
         /// 实体命名空间
         /// </summary>
         public string ModelsNamespace { get; set; }
+        /// <summary>
+        /// 仓储接口命名空间
+        /// </summary>
+        public string IRepositoryNamespace { get; set; }
+        /// <summary>
+        /// 仓储命名空间
+        /// </summary>
+        public string RepositoryNamespace { get; set; }
     }
 }

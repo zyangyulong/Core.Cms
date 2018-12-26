@@ -1,29 +1,22 @@
-﻿/**
+/**
 *┌──────────────────────────────────────────────────────────────┐
-*│　描    述：{Comment}                                                    
-*│　作    者：{Author}                                              
+*│　描    述：文章分类                                                    
+*│　作    者：张玉龙                                              
 *│　版    本：1.0   模板代码自动生成                                              
-*│　创建时间：{GeneratorTime}                            
+*│　创建时间：2018-12-23 17:31:33                           
 *└──────────────────────────────────────────────────────────────┘
 *┌──────────────────────────────────────────────────────────────┐
-*│　命名空间: {ModelsNamespace}                                  
-*│　类    名：{ModelName}                                     
+*│　命名空间： Core.CMS.IRepository                                   
+*│　接口名称： IArticleCategoryRepository                                      
 *└──────────────────────────────────────────────────────────────┘
 */
+using Core.CMS.Core.Repository;
+using Core.CMS.Models;
 using System;
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 
-namespace {ModelsNamespace}
+namespace Core.CMS.IRepository
 {
-	/// <summary>
-	/// {Author}
-	/// {GeneratorTime}
-	/// {Comment}
-	/// </summary>
-	[Table("{ModelName}")]
-	public class {ModelName}
-	{
-		{ModelProperties}
-	}
+    public interface IArticleCategoryRepository : IBaseRepository<ArticleCategory, Int32>
+    {
+    }
 }
